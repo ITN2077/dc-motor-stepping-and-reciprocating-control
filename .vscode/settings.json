@@ -1,8 +1,0 @@
-{
-    "files.associations": {
-        "zf_common_headfile.h": "c",
-        "xxxtimesliceoffset.h": "c",
-        "task_manager.h": "c",
-        "uart_data_unpacker.h": "c"
-    }
-}

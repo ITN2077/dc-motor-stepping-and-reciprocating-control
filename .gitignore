@@ -1,0 +1,37 @@
+# === 通用中间文件 & 编译产物 ===
+*.o
+*.d
+*.elf
+# === 只忽略编译产物，不忽略构建文件 ===
+
+# 中间文件
+*.o
+*.d
+*.elf
+*.hex
+*.bin
+*.map
+*.lst
+*.log
+*.tmp
+
+# 中间目录
+**/obj/
+**/build/
+**/Debug/
+**/Release/
+
+# IDE 缓存（但保留 .project, .cproject 等工程构建文件）
+.vscode/
+*.user
+*.swo
+*.swp
+*.swn
+
+# 可选：文档、图片等（视情况手动添加）
+*.doc
+*.pdf
+
+*.mrs-workspace
+*.json
+10.直流无刷电机步进驱动测试/.settings/language.settings.xml
