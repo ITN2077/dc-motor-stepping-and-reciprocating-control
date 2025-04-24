@@ -1,4 +1,6 @@
 # motor_step_controller.c && motor_step_controller.h
+模块文件位于.\project\code
+这个readme是GPT4o写的，太累了就没有自己写，给了思路让GPT写，自己审查。
 
 用于控制**无编码器直流有刷电机**进行“步进式”动作的控制模块。适用于需要控制电机“运行-停止-运行”周期行为的场景，如模拟步进运动、定程推进等。
 
