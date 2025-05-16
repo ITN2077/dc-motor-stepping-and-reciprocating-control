@@ -72,6 +72,16 @@ void motor_step_instance_start_non_preemptive(motor_step_instance_t *instance, c
         instance->direction = direction;
         instance->drive_duration_ms = drive_duration_ms;
         instance->cooldown_duration_ms = cooldown_duration_ms;
+
+        // 根据方向更新步数
+        if (direction == MOTOR_DIR_FORWARD)
+        {
+            instance->step_count++;
+        }
+        else
+        {
+            instance->step_count--;
+        }
     }
     // 其他状态不做任何操作，等待当前操作完成
 }
@@ -114,5 +124,18 @@ void motor_step_update(motor_step_instance_t *instance, unsigned short elapse_ms
         break;
     default:
         break;
+    }
+}
+
+/**
+ * @brief 清除电机步数计数
+ * @param instance 电机步进控制实例
+ * @note 将步数计数器清零，不影响电机当前运行状态
+ */
+void motor_step_clear_count(motor_step_instance_t *instance)
+{
+    if (instance != (void *)0)
+    {
+        instance->step_count = 0;
     }
 }

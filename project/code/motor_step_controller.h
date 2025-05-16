@@ -23,12 +23,7 @@
  *   3. 创建实例，同时完成初始化、挂载控制函数
  *  motor_step_instance_t P_M1_instance = {
  *      .state = MOTOR_STEP_STATE_IDLE,
- *      .timer_ms = 0,
  *      .direction = MOTOR_DIR_FORWARD,
- *      .request_pending = 0,
- *      .pwm_duty = 0,
- *      .drive_duration_ms = 0,
- *      .cooldown_duration_ms = 0,
  *      .set_pwm = motor1_step_instance_set_pwm,
  *      .set_dir = motor1_step_instance_set_dir,
  *      .brake = motor1_step_instance_brake,
@@ -38,6 +33,7 @@
  *   4. 启动电机
  *  motor_step_instance_start(m1, 100, MOTOR_DIR_FORWARD, 100, 30); // 非抢占调用
  *  motor_step_instance_start_non_preemptive(m1, 100, MOTOR_DIR_FORWARD, 100, 30); // 抢占调用
+ *  motor_step_instance_clear_count(m1); // 清除步数计数
  *
  *   5. 在定时任务中定期调用更新（如每10ms）
  *  motor_step_update(P_M1_instance, 10);
@@ -47,6 +43,7 @@
 * 日期                                      作者                             备注
 * 2025-04-24                              示新Sxx                           刚创建
 * 2025-05-16                              示新Sxx                           V1.0：修改成每个电机通过结构体初始化和控制，更加灵活
+* 2025-05-17                              示新Sxx                           V1.1：结构体中添加step_count，用于记录步数，并提供清除步数计数的接口
 ********************************************************************************************************************/
 /**
  * @file motor_step_controller.h
@@ -92,9 +89,11 @@ typedef struct
     void (*set_dir)(motor_direction_et dir); // 设置方向
     void (*brake)(void);                     // 主动刹车
 
+    int32_t step_count; /**< 步数计数器，正数表示正向步数，负数表示反向步数 */
+
     const char *name; /**< 实例名称 */
 } motor_step_instance_t;
- 
+
 /**
  * @brief 启动电机步进控制
  * @param instance 电机步进控制实例
@@ -115,7 +114,6 @@ void motor_step_instance_start(motor_step_instance_t *instance, const unsigned s
  */
 void motor_step_instance_start_non_preemptive(motor_step_instance_t *instance, const unsigned short pwm_duty, const motor_direction_et direction, const unsigned short drive_duration_ms, const unsigned short cooldown_duration_ms);
 
-
 /**
  * @brief 更新电机步进控制状态
  * @param instance 电机步进控制实例
@@ -123,5 +121,12 @@ void motor_step_instance_start_non_preemptive(motor_step_instance_t *instance, c
  * @note 在一个定时任务中调用，需要固定的时间调用，并将定时时间（ms）写入这个函数的参数中。用于更新电机步进控制状态
  */
 void motor_step_update(motor_step_instance_t *instance, unsigned short elapse_ms);
+
+/**
+ * @brief 清除电机步数计数
+ * @param instance 电机步进控制实例
+ * @note 将步数计数器清零，不影响电机当前运行状态
+ */
+void motor_step_clear_count(motor_step_instance_t *instance);
 
 #endif

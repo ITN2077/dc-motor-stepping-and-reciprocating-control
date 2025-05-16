@@ -28,17 +28,12 @@ void motor1_step_instance_brake(void)
 
 motor_step_instance_t P_M1_instance = {
     .state = MOTOR_STEP_STATE_IDLE,
-    .timer_ms = 0,
     .direction = MOTOR_DIR_FORWARD,
-    .request_pending = 0,
-    .pwm_duty = 0,
-    .drive_duration_ms = 0,
-    .cooldown_duration_ms = 0,
     .set_pwm = motor1_step_instance_set_pwm,
     .set_dir = motor1_step_instance_set_dir,
     .brake = motor1_step_instance_brake,
-    .name = "M1"
-};
+    .name = "M1",
+    .step_count = 0};
 
 void motor_step_update_task(void)
 {
@@ -121,12 +116,14 @@ void While_Task(void)
     {
         motor_step_instance_start_non_preemptive(&P_M1_instance, 100, MOTOR_DIR_FORWARD, dirve_duration_ms, cooldown_duration_ms);
         printf_USART_DEBUG("forward\r\n");
+        printf_USART_DEBUG("step_count:%d\r\n", P_M1_instance.step_count);
     }
     // 当test_value_1小于零时，电机反转一次
     else if (test_value_1 < 0)
     {
         motor_step_instance_start_non_preemptive(&P_M1_instance, 100, MOTOR_DIR_BACKWARD, dirve_duration_ms, cooldown_duration_ms);
         printf_USART_DEBUG("backward\r\n");
+        printf_USART_DEBUG("step_count:%d\r\n", P_M1_instance.step_count);
     }
 }
 /**
