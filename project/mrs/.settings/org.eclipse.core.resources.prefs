@@ -3,6 +3,7 @@ encoding//code/Task_Manager.c=UTF-8
 encoding//code/Task_Manager.h=UTF-8
 encoding//code/XxxTimeSliceOffset.c=UTF-8
 encoding//code/XxxTimeSliceOffset.h=UTF-8
+encoding//code/motor_step_controller.h=UTF-8
 encoding//zf_device/zf_device_dl1a.c=UTF-8
 encoding//zf_device/zf_device_dl1a.h=UTF-8
 encoding//zf_device/zf_device_dl1b.c=UTF-8

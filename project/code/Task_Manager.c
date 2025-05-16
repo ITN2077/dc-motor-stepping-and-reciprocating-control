@@ -1,5 +1,5 @@
 #include "Task_Manager.h"
-void motor1_step_instance_start(unsigned short duty, motor_direction_et dir)
+void motor1_step_instance_set_dir(motor_direction_et dir)
 {
     if (dir == MOTOR_DIR_FORWARD)
     {
@@ -14,19 +14,36 @@ void motor1_step_instance_start(unsigned short duty, motor_direction_et dir)
         gpio_set_level(E4, GPIO_HIGH);
     }
 }
-void motor1_step_instance_stop(void)
+void motor1_step_instance_set_pwm(uint16_t pwm)
+{
+    return;
+}
+
+void motor1_step_instance_brake(void)
 {
     gpio_set_level(E2, GPIO_HIGH);
     gpio_set_level(E3, GPIO_LOW);
     gpio_set_level(E4, GPIO_LOW);
 }
+
+motor_step_instance_t P_M1_instance = {
+    .state = MOTOR_STEP_STATE_IDLE,
+    .timer_ms = 0,
+    .direction = MOTOR_DIR_FORWARD,
+    .request_pending = 0,
+    .pwm_duty = 0,
+    .drive_duration_ms = 0,
+    .cooldown_duration_ms = 0,
+    .set_pwm = motor1_step_instance_set_pwm,
+    .set_dir = motor1_step_instance_set_dir,
+    .brake = motor1_step_instance_brake,
+    .name = "M1"
+};
+
 void motor_step_update_task(void)
 {
-    motor_step_update(10);
+    motor_step_update(&P_M1_instance, 10);
 }
-
-motor_step_instance_t *P_M1_instance = NULL; // 只声明指针，不在全局初始化
-
 //!------------------🍅🍅🍅🍅🍅🍅 注册时间片轮询任务 START 🍒🍒🍒🍒🍒🍒---------⬇️⬇️⬇️⬇️⬇️⬇️
 STR_XxxTimeSliceOffset Uart_task, Motor_task, While_task; // 创建任务句柄,While_task,Key_task,
 /**
@@ -36,7 +53,7 @@ STR_XxxTimeSliceOffset Uart_task, Motor_task, While_task; // 创建任务句柄,
 void Time_Slice_Offset_Register(void)
 {
     // !任务调度系统节拍 单位 10 ms 以下是注册任务
-    XxxTimeSliceOffset_Register(&While_task, While_Task, 10, 0);              // 注册while循环任务。
+    XxxTimeSliceOffset_Register(&While_task, While_Task, 10, 0);             // 注册while循环任务。
     XxxTimeSliceOffset_Register(&Uart_task, UART_packet_TASKhandler, 0, 0);  // 注册串口数据包接收任务, 轮询时间为0即while，偏移0.
     XxxTimeSliceOffset_Register(&Motor_task, motor_step_update_task, 10, 0); // 注册电机步进任务, 轮询时间为1ms，偏移0.
     // XxxTimeSliceOffset_Register(&Key_task, key_Processing, 2, 1);           // 按键扫描函数,需要使用记得注册任务以及初始化 key_init(20);
@@ -80,9 +97,7 @@ void PeripheraAll_Init()
     gpio_init(E3, GPO, 0, GPIO_PIN_CONFIG); // 电机正转
     gpio_init(E4, GPO, 0, GPIO_PIN_CONFIG); // 电机反转
 
-    // 在此处初始化P_M1_instance
-    P_M1_instance = motor_step_instance_create(motor1_step_instance_start, motor1_step_instance_stop);
-    motor_step_instance_start(P_M1_instance, 100, MOTOR_DIR_FORWARD, 100, 30);
+    motor_step_instance_start(&P_M1_instance, 100, MOTOR_DIR_FORWARD, 100, 30);
 
     // key_init(20); // 按键初始化，20ms一次中断
     printf_USART_DEBUG("hello,WSY!\r\n");
@@ -104,13 +119,13 @@ void While_Task(void)
     uint16_t cooldown_duration_ms = 100;
     if (test_value_1 > 0)
     {
-        motor_step_instance_start(P_M1_instance, 100, MOTOR_DIR_FORWARD, dirve_duration_ms, cooldown_duration_ms);
+        motor_step_instance_start_non_preemptive(&P_M1_instance, 100, MOTOR_DIR_FORWARD, dirve_duration_ms, cooldown_duration_ms);
         printf_USART_DEBUG("forward\r\n");
     }
     // 当test_value_1小于零时，电机反转一次
     else if (test_value_1 < 0)
     {
-        motor_step_instance_start(P_M1_instance, 100, MOTOR_DIR_BACKWARD, dirve_duration_ms, cooldown_duration_ms);
+        motor_step_instance_start_non_preemptive(&P_M1_instance, 100, MOTOR_DIR_BACKWARD, dirve_duration_ms, cooldown_duration_ms);
         printf_USART_DEBUG("backward\r\n");
     }
 }

@@ -13,4 +13,4 @@ MCU=CH32V307VCT6
 Mcu Type=CH32V30x
 Link=WCH-Link
 CLKSpeed=1
-Target Path=obj/10.直流无刷电机步进驱动模块测试.hex
+Target Path=obj/直流有刷电机模拟步进驱动模块.hex
