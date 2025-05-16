@@ -41,13 +41,13 @@
 
 #define MAX_MOTOR_INSTANCES 2
 
-    /**
-     * @brief 电机旋转方向枚举
-     */
-    typedef enum {
-        MOTOR_DIR_FORWARD,  /**< 电机正向旋转 */
-        MOTOR_DIR_BACKWARD, /**< 电机反向旋转 */
-    } motor_direction_et;
+/**
+ * @brief 电机旋转方向枚举
+ */
+typedef enum {
+    MOTOR_DIR_FORWARD,  /**< 电机正向旋转 */
+    MOTOR_DIR_BACKWARD, /**< 电机反向旋转 */
+} motor_direction_et;
 
 /**
  * @brief 电机步进状态枚举
@@ -73,8 +73,10 @@ typedef struct
     unsigned short drive_duration_ms;    /**< 驱动持续时间（毫秒） */
     unsigned short cooldown_duration_ms; /**< 冷却持续时间（毫秒） */
 
-    const void (*start_pwm)(unsigned short duty, motor_direction_et dir); /**< 启动PWM输出函数 */
-    const void (*stop_pwm)(void);                                         /**< 停止PWM输出函数 */
+    void (*start_pwm)(unsigned short duty, motor_direction_et dir); /**< 启动PWM输出函数 */
+    void (*stop_pwm)(void);                                         /**< 停止PWM输出函数 */
+
+    const char *name; /**< 实例名称 */
 } motor_step_instance_t;
 
 
