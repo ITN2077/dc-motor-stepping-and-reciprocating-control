@@ -1,106 +1,141 @@
-# motor_step_controller.c && motor_step_controller.h
-模块文件位于.\project\code
-这个readme是GPT4o写的，太累了就没有自己写，给了思路让GPT写，自己审查。
+# DC Motor Control Module
 
-用于控制**无编码器直流有刷电机**进行“步进式”动作的控制模块。适用于需要控制电机“运行-停止-运行”周期行为的场景，如模拟步进运动、定程推进等。
+该模块用于控制直流有刷电机实现模拟步进式运动与往复式运动，适用于嵌入式系统（如单片机）。通过状态机管理电机的驱动和冷却周期，支持多实例控制，并与底层硬件驱动解耦。
 
 ---
 
-## ✅ 功能概述
-
-该模块通过状态机管理电机启停行为，支持：
-- 指定**PWM占空比**与**旋转方向**
-- 配置**驱动时长**与**冷却间隔**
-- 多实例支持（当前最多支持 2 个电机实例）
-- 与硬件层函数解耦（通过回调函数控制电机输出）
-
----
-
-## 📦 使用方法
-
-### 1. 提供硬件控制函数
-
-你需要实现电机的 `start_pwm` 和 `stop_pwm` 控制函数，例如：
-
-```c
-void motor1_start(unsigned short duty, motor_direction_et dir) {
-    if (dir == MOTOR_DIR_FORWARD) {
-        gpio_set_level(E2, GPIO_HIGH); // 使能
-        gpio_set_level(E3, GPIO_HIGH); // 正转
-        gpio_set_level(E4, GPIO_LOW);
-    } else {
-        gpio_set_level(E2, GPIO_HIGH); // 使能
-        gpio_set_level(E3, GPIO_LOW); 
-        gpio_set_level(E4, GPIO_HIGH); // 反转
-    }
-}
-
-void motor1_stop(void) {
-    gpio_set_level(E2, GPIO_HIGH);
-    gpio_set_level(E3, GPIO_LOW);
-    gpio_set_level(E4, GPIO_LOW);
-}
-```
-
-### 2. 初始化 GPIO 并创建实例
-
-```c
-gpio_init(E2, GPO, 0, GPIO_PIN_CONFIG);
-gpio_init(E3, GPO, 0, GPIO_PIN_CONFIG);
-gpio_init(E4, GPO, 0, GPIO_PIN_CONFIG);
-
-motor_step_instance_t *m1 = motor_step_instance_create(motor1_start, motor1_stop);
-```
-
-### 3. 启动电机控制任务
-
-```c
-motor_step_instance_start(m1, 100, MOTOR_DIR_FORWARD, 100, 30); // 非抢占调用
-motor_step_instance_start_non_preemptive(m1, 100, MOTOR_DIR_FORWARD, 100, 30); // 抢占调用
-```
-
-### 4. 周期调用更新函数
-
-建议每 10ms 调用一次：
-
-```c
-void motor_step_update_task(void) {
-    motor_step_update(10);  //要将定时的时间传入，供程序内定时器使用
-}
-```
+## 功能特性
+- **步进控制**  
+  - 非抢占式启动驱动周期（驱动时间 + 冷却时间）
+  - 支持正反向运动，自动更新步数计数器
+  - 提供步数清零接口
+- **往复运动控制**  
+  - 支持正反向交替运动，可配置正反向驱动时间
+  - 支持冷却时间配置
+  - 提供启动/停止接口
+- **多实例支持**  
+  - 通过结构体实例化多个电机控制器
+  - 控制逻辑与硬件驱动分离（需用户实现PWM、方向、刹车函数）
 
 ---
 
-## ⚙️ 实现逻辑
+## 快速开始
 
-### 状态机：
-
-模块基于三态状态机进行控制：
-
-- `IDLE`：等待新请求，准备启动
-- `DRIVING`：正在驱动电机运行，计时中
-- `COOLDOWN`：驱动完成后的冷却阶段，等待下一次驱动
-
-### 启动逻辑：
-
-- 如果在 `IDLE` 状态，收到新请求则立即启动电机
-- 如果在 `DRIVING` 状态，方向相同则刷新参数；方向不同则先冷却再执行
-- 在冷却完成后，若存在新请求则自动执行
-
-### 结构体字段：
-
-- `pwm_duty`：占空比
-- `direction`：正转/反转
-- `drive_duration_ms`：本次驱动时长
-- `cooldown_duration_ms`：驱动后冷却时长
-- `timer_ms`：当前状态计时器
-- `request_pending`：是否有待处理请求
+### 依赖项
+- C编译器支持C99标准
+- 标准头文件：`<stdbool.h>`, `<stdint.h>`
+- 用户需实现底层硬件驱动函数（PWM、方向、刹车）
 
 ---
 
-## 🔌 未来可扩展
+### 步进控制示例
 
-- 增加对驱动时间与冷却时间配置的动态管理接口
-- 增加支持多种工作模式（如脉冲计数）
-- 增加运行状态反馈机制（回调、LED 指示、串口打印等）
+#### 1. 初始化硬件驱动
+```c
+// 示例：初始化GPIO和PWM
+gpio_init(E2, GPO, 0, GPIO_PIN_CONFIG); // 方向引脚
+gpio_init(E3, GPO, 0, GPIO_PIN_CONFIG); // 使能引脚
+gpio_init(E4, GPO, 0, GPIO_PIN_CONFIG); // 刹车引脚
 
+// 实现控制函数
+void motor_set_pwm(uint16_t pwm) { /* PWM设置逻辑 */ }
+void motor_set_dir(motor_direction_et dir) { /* 方向设置逻辑 */ }
+void motor_brake(void) { /* 刹车逻辑 */ }
+```
+
+#### 2. 创建控制实例
+```c
+motor_step_instance_t motor_step = {
+    .state = MOTOR_STEP_STATE_IDLE,
+    .set_pwm = motor_set_pwm,
+    .set_dir = motor_set_dir,
+    .brake = motor_brake,
+    .name = "STEP_MOTOR"
+};
+```
+
+#### 3. 定时任务中更新状态
+```c
+// 每10ms调用一次（周期需严格保证）
+motor_step_update(&motor_step, 10);
+```
+
+#### 4. 启动步进运动
+```c
+// 参数：PWM占空比、方向、驱动时间(ms)、冷却时间(ms)
+motor_step_instance_start(&motor_step, 100, MOTOR_DIR_FORWARD, 100, 30);
+// 清除步数计数
+motor_step_clear_count(&motor_step);
+```
+
+---
+
+### 往复运动示例
+
+#### 1. 创建往复控制实例
+```c
+motor_recip_instance_t motor_recip = {
+    .state = MOTOR_RECIP_STATE_IDLE,
+    .set_pwm = motor_set_pwm,
+    .set_dir = motor_set_dir,
+    .brake = motor_brake,
+    .name = "RECIP_MOTOR"
+};
+```
+
+#### 2. 定时任务中更新状态
+```c
+motor_recip_update(&motor_recip, 10);
+```
+
+#### 3. 启动往复运动
+```c
+// 参数：PWM占空比、正向时间(ms)、反向时间(ms)、冷却时间(ms)
+motor_recip_instance_start(&motor_recip, 100, 1000, 600, 100);
+// 停止运动
+motor_recip_instance_stop(&motor_recip);
+```
+
+---
+
+## API 参考
+
+### 步进控制
+- **`motor_step_instance_start()`**  
+  启动步进运动（仅在空闲状态下生效）。
+- **`motor_step_clear_count()`**  
+  清零步数计数器。
+- **`motor_step_update()`**  
+  更新状态机，需周期性调用。
+
+### 往复控制
+- **`motor_recip_instance_start()`**  
+  启动往复运动。
+- **`motor_recip_instance_stop()`**  
+  强制停止运动并复位状态。
+- **`motor_recip_update()`**  
+  更新状态机，需周期性调用。
+
+---
+
+## 注意事项
+1. **定时任务周期**  
+   `motor_step_update` 和 `motor_recip_update` 必须严格按固定周期调用（如10ms），否则时间计算会偏差。
+2. **抢占式控制**  
+   步进控制为非抢占式，若电机正在运行，新请求会被忽略。
+3. **硬件驱动实现**  
+   用户需根据实际硬件实现 `set_pwm`、`set_dir`、`brake` 函数，确保逻辑正确。
+4. **线程安全**  
+   若在RTOS中使用，需自行添加互斥锁保护共享资源（如实例状态）。
+
+---
+
+## 版本历史
+- **V1.0** (2025-05-16)  
+  支持步进控制，多实例管理。
+- **V1.1** (2025-05-17)  
+  添加步数计数器及清零接口。
+- **V1.2** (2025-05-18)  
+  新增往复运动控制功能。
+
+```

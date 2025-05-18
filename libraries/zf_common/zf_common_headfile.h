@@ -138,7 +138,7 @@
 #include "Ring_Buffer.h"
 #include "XxxTimeSliceOffset.h"
 #include "Task_Manager.h"
-#include "motor_step_controller.h"
+#include "DC_Motion.h"
 //===================================================用户自定义文件===================================================
 
 #endif

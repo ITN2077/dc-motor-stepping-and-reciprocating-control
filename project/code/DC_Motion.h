@@ -1,4 +1,5 @@
 #include <stdint.h>
+#include <stdbool.h>
 
 /*********************************************************************************************************************
 /**
@@ -8,7 +9,7 @@
  * @details 本模块通过状态机控制电机"运行-冷却"周期，适用于模拟步进推进等需求。
  *          支持多实例管理，控制逻辑与底层GPIO解耦，用户需提供控制函数。
  *
- * 使用示例：
+ * 模拟步进使用示例：
  *  -------------------------------------------------------------------
  *   1. 完成驱动初始化，比如这里是初始化GPIO（电机使能、正转、反转）
  *  gpio_init(E2, GPO, 0, GPIO_PIN_CONFIG);
@@ -29,27 +30,57 @@
  *      .brake = motor1_step_instance_brake,
  *      .name = "M1"
  *  };
+ * 
+ *   4. 在定时任务中定期调用更新（如每10ms）
+ *  motor_step_update(P_M1_instance, 10);
  *
- *   4. 启动电机
+ *   5. 启动电机
  *  motor_step_instance_start(m1, 100, MOTOR_DIR_FORWARD, 100, 30); // 非抢占调用
  *  motor_step_instance_start_non_preemptive(m1, 100, MOTOR_DIR_FORWARD, 100, 30); // 抢占调用
  *  motor_step_instance_clear_count(m1); // 清除步数计数
  *
- *   5. 在定时任务中定期调用更新（如每10ms）
- *  motor_step_update(P_M1_instance, 10);
  *  -------------------------------------------------------------------
+ * 
+ * 电机往复使用示例：
+ *  -------------------------------------------------------------------
+ *   1. 完成驱动初始化，比如这里是初始化GPIO（电机使能、正转、反转）
+ *  gpio_init(E2, GPO, 0, GPIO_PIN_CONFIG);
+ *  gpio_init(E3, GPO, 0, GPIO_PIN_CONFIG);
+ *  gpio_init(E4, GPO, 0, GPIO_PIN_CONFIG);
+ *
+ *   2. 实现PWM控制函数、方向控制函数、刹车函数
+ *  void motor1_recip_instance_set_pwm(uint16_t pwm)
+ *  void motor1_recip_instance_set_dir(motor_direction_et dir)
+ *  void motor1_recip_instance_brake(void)
+ *
+ *   3. 创建实例，同时完成初始化、挂载控制函数
+ *  motor_recip_instance_t P_M1_instance = {
+ *      .state = MOTOR_RECIP_STATE_IDLE,
+ *      .set_pwm = motor1_recip_instance_set_pwm,
+ *      .set_dir = motor1_recip_instance_set_dir,
+ *      .brake = motor1_recip_instance_brake,
+ *      .name = "M1"
+ *  };
+ * 
+ *   4. 在定时任务中定期调用更新（如每10ms）
+ *  motor_recip_update(P_M1_instance, 10);
+ *
+ *   5. 启动电机
+ *  motor_recip_instance_start(P_M1_instance, 100, 1000, 600, 100); // 非抢占调用
+ *  motor_recip_instance_stop(P_M1_instance); // 停止电机
  *
 * 修改记录
 * 日期                                      作者                             备注
 * 2025-04-24                              示新Sxx                           刚创建
 * 2025-05-16                              示新Sxx                           V1.0：修改成每个电机通过结构体初始化和控制，更加灵活
 * 2025-05-17                              示新Sxx                           V1.1：结构体中添加step_count，用于记录步数，并提供清除步数计数的接口
+* 2025-05-18                              示新Sxx                           V1.2：添加电机往复运动控制，去除模拟step非阻塞调用
 ********************************************************************************************************************/
 /**
  * @file motor_step_controller.h
  * @brief 步进电机控制模块，用于控制直流无刷电机的步进驱动
  */
-#ifndef __MOTOR_STEP_CONTROLLER_H__
+    #ifndef __MOTOR_STEP_CONTROLLER_H__
 #define __MOTOR_STEP_CONTROLLER_H__
 
 /**
@@ -72,6 +103,18 @@ typedef enum
 } motor_step_state_et;
 
 /**
+ * @brief 电机往复运动状态枚举
+ */
+typedef enum
+{
+    MOTOR_RECIP_STATE_IDLE,             /**< 空闲状态 */
+    MOTOR_RECIP_STATE_FORWARD,          /**< 正向驱动状态 */
+    MOTOR_RECIP_STATE_FORWARD_COOLDOWN, /**< 正向驱动后冷却状态 */
+    MOTOR_RECIP_STATE_BACKWARD,         /**< 反向驱动状态 */
+    MOTOR_RECIP_STATE_BACKWARD_COOLDOWN /**< 反向驱动后冷却状态 */
+} motor_recip_state_et;
+
+/**
  * @brief 电机步进控制实例结构体
  */
 typedef struct
@@ -79,7 +122,7 @@ typedef struct
     motor_step_state_et state;    /**< 当前状态 */
     unsigned short timer_ms;      /**< 计时器（毫秒） */
     motor_direction_et direction; /**< 旋转方向 */
-    _Bool request_pending;        /**< 待处理请求标志 */
+    bool request_pending;         /**< 待处理请求标志 */
     unsigned short pwm_duty;      /**< PWM占空比 */
 
     unsigned short drive_duration_ms;    /**< 驱动持续时间（毫秒） */
@@ -95,14 +138,26 @@ typedef struct
 } motor_step_instance_t;
 
 /**
- * @brief 启动电机步进控制
- * @param instance 电机步进控制实例
- * @param pwm_duty PWM占空比
- * @param direction 旋转方向
- * @param dirve_duration_ms 驱动持续时间（毫秒）
- * @param cooldown_duration_ms 冷却持续时间（毫秒）
+ * @brief 电机往复运动控制实例结构体
  */
-void motor_step_instance_start(motor_step_instance_t *instance, const unsigned short pwm_duty, const motor_direction_et direction, const unsigned short dirve_duration_ms, const unsigned short cooldown_duration_ms);
+typedef struct
+{
+    motor_recip_state_et state; /**< 当前状态 */
+    unsigned short timer_ms;    /**< 计时器（毫秒） */
+    bool request_pending;       /**< 待处理请求标志 */
+    bool running;               /**< 运行标志，表示是否在执行往复运动 */
+    unsigned short pwm_duty;    /**< PWM占空比 */
+
+    unsigned short forward_duration_ms;  /**< 正向驱动持续时间（毫秒） */
+    unsigned short backward_duration_ms; /**< 反向驱动持续时间（毫秒） */
+    unsigned short cooldown_duration_ms; /**< 冷却持续时间（毫秒） */
+
+    void (*set_pwm)(uint16_t pwm);           // 设置 PWM
+    void (*set_dir)(motor_direction_et dir); // 设置方向
+    void (*brake)(void);                     // 主动刹车
+
+    const char *name; /**< 实例名称 */
+} motor_recip_instance_t;
 
 /**
  * @brief 启动电机步进控制（非抢占式）
@@ -112,7 +167,14 @@ void motor_step_instance_start(motor_step_instance_t *instance, const unsigned s
  * @param drive_duration_ms 驱动持续时间（毫秒）
  * @param cooldown_duration_ms 冷却持续时间（毫秒）
  */
-void motor_step_instance_start_non_preemptive(motor_step_instance_t *instance, const unsigned short pwm_duty, const motor_direction_et direction, const unsigned short drive_duration_ms, const unsigned short cooldown_duration_ms);
+bool motor_step_instance_start(motor_step_instance_t *instance, const unsigned short pwm_duty, const motor_direction_et direction, const unsigned short drive_duration_ms, const unsigned short cooldown_duration_ms);
+
+/**
+ * @brief 清除电机步数计数
+ * @param instance 电机步进控制实例
+ * @note 将步数计数器清零，不影响电机当前运行状态
+ */
+void motor_step_clear_count(motor_step_instance_t *instance);
 
 /**
  * @brief 更新电机步进控制状态
@@ -122,11 +184,21 @@ void motor_step_instance_start_non_preemptive(motor_step_instance_t *instance, c
  */
 void motor_step_update(motor_step_instance_t *instance, unsigned short elapse_ms);
 
+
 /**
- * @brief 清除电机步数计数
- * @param instance 电机步进控制实例
- * @note 将步数计数器清零，不影响电机当前运行状态
+ * @brief 启动电机往复运动控制
+ * @param instance 电机往复运动控制实例
+ * @param pwm_duty PWM占空比
+ * @param forward_move_duration_ms 正向驱动持续时间（毫秒）
+ * @param backward_move_duration_ms 反向驱动持续时间（毫秒）
+ * @param cooldown_duration_ms 冷却持续时间（毫秒）
  */
-void motor_step_clear_count(motor_step_instance_t *instance);
+bool motor_recip_instance_start(motor_recip_instance_t *instance, const unsigned short pwm_duty, const unsigned short forward_move_duration_ms, const unsigned short backward_move_duration_ms, const unsigned short cooldown_duration_ms);
+
+/**
+ * @brief 停止电机往复运动
+ * @param instance 电机往复运动控制实例
+ */
+void motor_recip_instance_stop(motor_recip_instance_t *instance);
 
 #endif
